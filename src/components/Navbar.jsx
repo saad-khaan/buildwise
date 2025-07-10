@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 
 const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -19,10 +20,11 @@ const Navbar = () => {
         {menuOpen && (
           <div className="absolute right-0 mt-2 w-48 bg-[#1e293b] border border-gray-700 p-4 rounded shadow">
             <ul className="space-y-2">
-              <li><a href="#about" className="hover:text-blue-400">About</a></li>
-              <li><a href="#" className="hover:text-blue-400">Map</a></li>
-              <li><a href="#" className="hover:text-blue-400">Checklist</a></li>
-              <li><a href="#" className="hover:text-blue-400">Chatbot</a></li>
+              <li><Link to="/" onClick={() => setMenuOpen(false)} className="hover:text-blue-400">Home</Link></li>
+              <li><Link to="/about" onClick={() => setMenuOpen(false)} className="hover:text-blue-400">About</Link></li>
+              <li><Link to="/map" onClick={() => setMenuOpen(false)} className="hover:text-blue-400">Map</Link></li>
+              <li><Link to="/checklist" onClick={() => setMenuOpen(false)} className="hover:text-blue-400">Checklist</Link></li>
+              <li><Link to="/chatbot" onClick={() => setMenuOpen(false)} className="hover:text-blue-400">Chatbot</Link></li>
             </ul>
           </div>
         )}
