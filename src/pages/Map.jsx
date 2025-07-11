@@ -1,80 +1,113 @@
-import React, { useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import React, { useEffect, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import axios from "axios";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import Header from "../components/Header";
 
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.3/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.3/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.3/dist/images/marker-shadow.png",
-});
-
-const ChangeMapView = ({ coords }) => {
-  const map = useMap();
-  map.setView(coords, 15);
-  return null;
-};
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const Map = () => {
-  const [address, setAddress] = useState("");
-  const [coords, setCoords] = useState([56.1304, -106.3468]); // Default to Canada
-  const [found, setFound] = useState(false);
+  const mapContainerRef = useRef(null);
+  const [map, setMap] = useState(null);
+  const [marker, setMarker] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
 
-  const handleSearch = async () => {
+  // Initialize map
+  useEffect(() => {
+    const mapInstance = new mapboxgl.Map({
+      container: mapContainerRef.current,
+      style: "mapbox://styles/mapbox/streets-v12", // Light style (can be changed)
+      center: [-123.3656, 48.4284], // Victoria, BC
+      zoom: 12,
+    });
+
+    setMap(mapInstance);
+
+    return () => mapInstance.remove();
+  }, []);
+
+  // Autocomplete
+  const fetchSuggestions = async (query) => {
     try {
-      const res = await axios.get("https://nominatim.openstreetmap.org/search", {
-        params: {
-          q: address,
-          format: "json",
-        },
-      });
+      const res = await axios.get(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+          query
+        )}.json?autocomplete=true&access_token=${mapboxgl.accessToken}`
+      );
+      setSuggestions(res.data.features);
+    } catch (err) {
+      console.error("Autocomplete error:", err);
+    }
+  };
 
-      if (res.data.length > 0) {
-        const { lat, lon } = res.data[0];
-        setCoords([parseFloat(lat), parseFloat(lon)]);
-        setFound(true);
+  const handleChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    if (query.length > 2) fetchSuggestions(query);
+    else setSuggestions([]);
+  };
+
+  const handleSearch = async (placeName) => {
+    const query = placeName || searchQuery;
+    if (!query) return;
+
+    try {
+      const res = await axios.get(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+          query
+        )}.json?access_token=${mapboxgl.accessToken}`
+      );
+
+      const feature = res.data.features[0];
+      if (feature) {
+        const [lng, lat] = feature.center;
+
+        map.flyTo({ center: [lng, lat], zoom: 14 });
+
+        if (marker) marker.remove();
+        const newMarker = new mapboxgl.Marker().setLngLat([lng, lat]).addTo(map);
+        setMarker(newMarker);
+        setSuggestions([]);
+        setSearchQuery(feature.place_name);
       } else {
         alert("Address not found.");
-        setFound(false);
       }
     } catch (err) {
       console.error("Geocoding error:", err);
-      alert("Error finding location.");
-      setFound(false);
+      alert("Failed to search address.");
     }
   };
 
   return (
-    <div className="px-4 py-20 text-center">
-      <h2 className="text-3xl font-semibold mb-4">Zoning Map</h2>
-
-      <div className="mb-6 flex justify-center gap-2">
-        <input
-          type="text"
-          placeholder="Enter address..."
-          className="w-80 px-4 py-2 text-black rounded"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-        />
-        <button
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-          onClick={handleSearch}
-        >
-          Search
-        </button>
-      </div>
-
-      <div className="w-full max-w-5xl mx-auto h-[500px] z-0">
-        <MapContainer center={coords} zoom={5} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
-          <TileLayer
-            attribution='&copy; <a href="https://osm.org">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          {found && <Marker position={coords}><Popup>{address}</Popup></Marker>}
-          <ChangeMapView coords={coords} />
-        </MapContainer>
+    <div className="bg-[#0f172a] text-white min-h-screen">
+      <Header />
+      <div className="flex justify-center items-center px-4 py-8">
+        <div className="relative w-full max-w-6xl h-[80vh] rounded-xl overflow-hidden shadow-2xl">
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-lg">
+            <input
+              type="text"
+              placeholder="Search address..."
+              value={searchQuery}
+              onChange={handleChange}
+              className="w-full px-4 py-2 rounded-md border border-gray-300 shadow-md text-black"
+            />
+            {suggestions.length > 0 && (
+              <ul className="bg-white text-black border border-gray-300 rounded-md shadow-md max-h-60 overflow-y-auto mt-1">
+                {suggestions.map((sug) => (
+                  <li
+                    key={sug.id}
+                    onClick={() => handleSearch(sug.place_name)}
+                    className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                  >
+                    {sug.place_name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div ref={mapContainerRef} className="w-full h-full" />
+        </div>
       </div>
     </div>
   );
